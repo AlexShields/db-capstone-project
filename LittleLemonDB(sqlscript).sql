@@ -50,7 +50,7 @@ ENGINE = InnoDB;
 DROP TABLE IF EXISTS `LittleLemon`.`MenuItems` ;
 
 CREATE TABLE IF NOT EXISTS `LittleLemon`.`MenuItems` (
-  `MenuItemsID` INT NOT NULL,
+  `MenuItemsID` INT NOT NULL AUTO_INCREMENT,
   `CourseName` VARCHAR(45) NULL,
   `StarterName` VARCHAR(45) NULL,
   `DesertName` VARCHAR(45) NULL,
@@ -124,7 +124,7 @@ CREATE INDEX `fk_Orders_Menu1_idx` ON `LittleLemon`.`Orders` (`MenuID` ASC) VISI
 DROP TABLE IF EXISTS `LittleLemon`.`StaffInfromation` ;
 
 CREATE TABLE IF NOT EXISTS `LittleLemon`.`StaffInfromation` (
-  `StaffID` INT NOT NULL,
+  `StaffID` INT NOT NULL AUTO_INCREMENT,
   `Role` VARCHAR(45) NULL,
   `Salary` DECIMAL NULL,
   PRIMARY KEY (`StaffID`))
@@ -138,11 +138,10 @@ DROP TABLE IF EXISTS `LittleLemon`.`Bookings` ;
 
 CREATE TABLE IF NOT EXISTS `LittleLemon`.`Bookings` (
   `BookingID` INT NOT NULL AUTO_INCREMENT,
-  `DateTime` DATE NULL,
+  `BookingDate` DATE NULL,
   `TableNumber` INT NULL,
-  `Shipping Address` VARCHAR(200) NULL,
-  `StaffID` INT NOT NULL,
-  `CustomerDetails_CustomerID` INT UNSIGNED NOT NULL,
+  `StaffID` INT NOT NULL DEFAULT 1,
+  `CustomerID` INT UNSIGNED NOT NULL,
   PRIMARY KEY (`BookingID`),
   CONSTRAINT `fk_Bookings_StaffInfromation1`
     FOREIGN KEY (`StaffID`)
@@ -150,7 +149,7 @@ CREATE TABLE IF NOT EXISTS `LittleLemon`.`Bookings` (
     ON DELETE NO ACTION
     ON UPDATE NO ACTION,
   CONSTRAINT `fk_Bookings_CustomerDetails1`
-    FOREIGN KEY (`CustomerDetails_CustomerID`)
+    FOREIGN KEY (`CustomerID`)
     REFERENCES `LittleLemon`.`CustomerDetails` (`CustomerID`)
     ON DELETE NO ACTION
     ON UPDATE NO ACTION)
@@ -160,7 +159,7 @@ CREATE UNIQUE INDEX `BookingID_UNIQUE` ON `LittleLemon`.`Bookings` (`BookingID` 
 
 CREATE INDEX `fk_Bookings_StaffInfromation1_idx` ON `LittleLemon`.`Bookings` (`StaffID` ASC) VISIBLE;
 
-CREATE INDEX `fk_Bookings_CustomerDetails1_idx` ON `LittleLemon`.`Bookings` (`CustomerDetails_CustomerID` ASC) VISIBLE;
+CREATE INDEX `fk_Bookings_CustomerDetails1_idx` ON `LittleLemon`.`Bookings` (`CustomerID` ASC) VISIBLE;
 
 USE `LittleLemon` ;
 
@@ -227,6 +226,138 @@ CREATE PROCEDURE CancelOrder(IN InOrderID INT)
 BEGIN
   DELETE FROM Orders WHERE OrderID = InOrderID;
   SELECT CONCAT('Order ', InOrderID, ' has been cancelled.') AS confirmation;
+END;$$
+
+DELIMITER ;
+
+-- -----------------------------------------------------
+-- procedure CheckBooking
+-- -----------------------------------------------------
+
+USE `LittleLemon`;
+DROP procedure IF EXISTS `LittleLemon`.`CheckBooking`;
+
+DELIMITER $$
+USE `LittleLemon`$$
+CREATE PROCEDURE CheckBooking(IN InBookingDate DATE, IN InTableNumber INT)
+BEGIN
+    DECLARE BookingCount INT;
+
+    SELECT COUNT(*) INTO BookingCount 
+    FROM Bookings 
+    WHERE BookingDate = InBookingDate 
+    AND TableNumber = InTableNumber;
+
+    IF booking_count > 0 THEN
+        SELECT 'Table is already booked' AS message;
+    ELSE
+        SELECT 'Table is available for booking' AS message;
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- -----------------------------------------------------
+-- procedure AddValidBooking
+-- -----------------------------------------------------
+
+USE `LittleLemon`;
+DROP procedure IF EXISTS `LittleLemon`.`AddValidBooking`;
+
+DELIMITER $$
+USE `LittleLemon`$$
+CREATE PROCEDURE AddValidBooking(IN InBookingDate DATE, IN InTableNumber INT, IN InCustomerID INT)
+BEGIN
+    DECLARE BookingCount INT;
+    DECLARE CustCount INT;
+
+    START TRANSACTION;
+
+    INSERT INTO bookings (BookingDate, TableNumber, CustomerID)
+    VALUES (InBookingDate, InTableNumber , InCustomerID);
+
+    SELECT COUNT(*) INTO BookingCount 
+    FROM bookings 
+    WHERE BookingDate = InBookingDate 
+    AND TableNumber = InTableNumber;
+
+	SELECT COUNT(*) INTO CustCount 
+    FROM bookings 
+    WHERE BookingDate = InBookingDate
+    AND TableNumber = InTableNumber
+    AND CustomerID  = InCustomerID;
+    
+    
+    IF BookingCount > 1 AND CustCount >1 THEN
+        ROLLBACK;
+        SELECT CONCAT('Customer', InCustomerID, ' Has already booked table ',InTableNumber);
+    ELSEIF BookingCount > 1 THEN
+		ROLLBACK;
+        SELECT CONCAT('Table ', InTableNumber, ' is already booked');
+	ELSE
+		COMMIT;
+        SELECT 'Booking added successfully';
+END IF;
+END;$$
+
+DELIMITER ;
+
+-- -----------------------------------------------------
+-- procedure AddBooking
+-- -----------------------------------------------------
+
+USE `LittleLemon`;
+DROP procedure IF EXISTS `LittleLemon`.`AddBooking`;
+
+DELIMITER $$
+USE `LittleLemon`$$
+CREATE PROCEDURE `AddBooking` (IN InBookingDate DATE, IN InTableNumber INT, IN InCustomerID INT)
+BEGIN
+CALL AddValidBooking (InBookingDate, InTableNumber, InCustomerID);
+END;$$
+
+DELIMITER ;
+
+-- -----------------------------------------------------
+-- procedure UpdateBooking
+-- -----------------------------------------------------
+
+USE `LittleLemon`;
+DROP procedure IF EXISTS `LittleLemon`.`UpdateBooking`;
+
+DELIMITER $$
+USE `LittleLemon`$$
+CREATE PROCEDURE `UpdateBooking` (IN InBookingID INT, IN NewDate DATE)
+BEGIN
+UPDATE Bookings
+SET BookingDate = 'NewDate'
+WHERE BookingID = InBookingID;
+END$$
+
+DELIMITER ;
+
+-- -----------------------------------------------------
+-- procedure CancelBooking
+-- -----------------------------------------------------
+
+USE `LittleLemon`;
+DROP procedure IF EXISTS `LittleLemon`.`CancelBooking`;
+
+DELIMITER $$
+USE `LittleLemon`$$
+CREATE PROCEDURE `CancelBooking` (IN InBookingID INT)
+BEGIN
+  DECLARE BookingCount INT;
+  SELECT COUNT(*) INTO BookingCount 
+    FROM bookings 
+    WHERE BookingID = InBookingID;
+    
+    IF BookingCount = 1 THEN
+		DELETE FROM Bookings WHERE BookingID = InBookingID;
+        SELECT CONCAT('Booking', InBookingID, ' Has sucessfully been canceled') AS Confirmation;
+    ELSE
+        SELECT CONCAT('No Booking with ID ', InBookingID, ' exists') AS Confirmation;
+	END IF;
 END;$$
 
 DELIMITER ;
