@@ -68,7 +68,6 @@ CREATE TABLE IF NOT EXISTS `LittleLemon`.`Menu` (
   `MenuName` VARCHAR(45) NULL,
   `Cuisine` VARCHAR(45) NULL,
   `MenuItemsID` INT NOT NULL,
-  `Cost` VARCHAR(45) NULL,
   PRIMARY KEY (`MenuID`),
   CONSTRAINT `fk_Menu_MenuItems1`
     FOREIGN KEY (`MenuItemsID`)
@@ -239,7 +238,7 @@ DROP procedure IF EXISTS `LittleLemon`.`CheckBooking`;
 
 DELIMITER $$
 USE `LittleLemon`$$
-CREATE PROCEDURE CheckBooking(IN InBookingDate DATE, IN InTableNumber INT)
+CREATE PROCEDURE CheckBooking(IN InBookingDate DATE, IN InTableNumber INT, OUT Available BOOLEAN)
 BEGIN
     DECLARE BookingCount INT;
 
@@ -248,10 +247,13 @@ BEGIN
     WHERE BookingDate = InBookingDate 
     AND TableNumber = InTableNumber;
 
-    IF booking_count > 0 THEN
+    IF BookingCount > 0 THEN
+		SET Available = false;
         SELECT 'Table is already booked' AS message;
     ELSE
+		SET Available = true;
         SELECT 'Table is available for booking' AS message;
+
     END IF;
 END$$
 
@@ -327,12 +329,27 @@ DROP procedure IF EXISTS `LittleLemon`.`UpdateBooking`;
 
 DELIMITER $$
 USE `LittleLemon`$$
-CREATE PROCEDURE `UpdateBooking` (IN InBookingID INT, IN NewDate DATE)
+CREATE PROCEDURE `UpdateBooking`(IN InBookingID INT, IN NewDate DATE)
 BEGIN
-UPDATE Bookings
-SET BookingDate = 'NewDate'
-WHERE BookingID = InBookingID;
-END$$
+	DECLARE Avail BOOLEAN;
+	DECLARE BookingCount INT;
+	DECLARE TableIDCheck INT;
+	
+	SELECT TableNumber FROM Bookings WHERE BookingID = InBookingID INTO TableIDCheck;
+    CALL CheckBooking(NewDate, TableIDCheck, @Available);
+	SELECT @Available INTO Avail;
+	SELECT COUNT(*) INTO BookingCount FROM Bookings WHERE BookingID = InBookingID;
+	
+	IF BookingCount = 1 AND Avail = true THEN
+		UPDATE Bookings SET BookingDate = NewDate WHERE BookingID = InBookingID;
+		SELECT CONCAT("BookingID ",InBookingID, ' Successfully Moved to ', NewDate) AS Confirmation;
+	ELSEIF BookingCount = 1 THEN
+		SELECT CONCAT('Table Number ', TableIDCheck, ' is already booked on ', NewDate) AS 'Error';
+	ELSE
+		SELECT CONCAT('No valid booking with ID ', InBookingID) AS 'Error';
+	END IF;
+	
+END;$$
 
 DELIMITER ;
 
